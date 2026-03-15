@@ -1,0 +1,68 @@
+name: Build Waydroid-Ready WSL2 Kernel
+
+on:
+  workflow_dispatch: # 允许手动点击按钮触发编译
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 安装环境依赖
+        run: |
+          sudo apt update
+          sudo apt install build-essential flex bison libssl-dev libelf-dev libncurses-dev autoconf charmap -y
+
+      - name: 拉取微软官方内核源码
+        run: |
+          # 推荐使用 linux-msft-wsl-6.6.y 分支，较新且稳定
+          git clone --depth 1 -b linux-msft-wsl-6.6.y https://github.com/microsoft/WSL2-Linux-Kernel.git
+          cd WSL2-Linux-Kernel
+
+      - name: 配置内核参数 (关键步骤)
+        run: |
+          cd WSL2-Linux-Kernel
+          # 使用默认配置作为基础
+          cp Microsoft/config-wsl .config
+
+          # 启用 Binder 和相关驱动 (设置为 y 即内置)
+          scripts/config --enable CONFIG_ANDROID
+          scripts/config --enable CONFIG_ANDROID_BINDER_IPC
+          scripts/config --enable CONFIG_ANDROID_BINDERFS
+          scripts/config --enable CONFIG_ASHMEM
+          
+          # Waydroid 必需的 PSI (压力停顿信息) 和 Cgroups
+          scripts/config --enable CONFIG_PSI
+          scripts/config --set-val CONFIG_PSI_DEFAULT_DISABLED n
+          scripts/config --enable CONFIG_MEMCG
+          scripts/config --enable CONFIG_MEMCG_SWAP
+          
+          # 针对 Waydroid 的网络/显示优化
+          scripts/config --enable CONFIG_IKCONFIG
+          scripts/config --enable CONFIG_IKCONFIG_PROC
+
+          # 预处理配置
+          make olddefconfig
+
+      - name: 开始编译内核
+        run: |
+          cd WSL2-Linux-Kernel
+          make bzImage -j$(nproc)
+
+      - name: 提取内核头文件 (Optional)
+        run: |
+          cd WSL2-Linux-Kernel
+          mkdir -p ../dist/headers
+          make headers_install INSTALL_HDR_PATH=../dist/headers
+
+      - name: 整理输出产物
+        run: |
+          mkdir -p output
+          cp WSL2-Linux-Kernel/arch/x86/boot/bzImage output/
+          tar -czvf output/kernel-headers.tar.gz -C dist/headers .
+
+      - name: 上传到 Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: WSL2-Waydroid-Kernel
+          path: output/
+          
