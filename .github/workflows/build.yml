@@ -10,7 +10,9 @@ jobs:
       - name: 安装环境依赖
         run: |
           sudo apt update
-          sudo apt install build-essential flex bison libssl-dev libelf-dev libncurses-dev autoconf charmap -y
+          # 移除了不存在的 charmap，增加了 bc 和 dwarves (用于 BTF 支持)
+          sudo apt install build-essential flex bison libssl-dev libelf-dev \
+          libncurses-dev autoconf bc dwarves python3 python3-pip -y
 
       - name: 拉取微软官方内核源码
         run: |
